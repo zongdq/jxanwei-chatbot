@@ -1,0 +1,13 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-net --allow-env --unstable-kv server.ts"
+  },
+  "deploy": {
+    "entrypoint": "server.ts"
+  },
+  "imports": {
+    "hono": "https://deno.land/x/hono@v4.3.11/mod.ts",
+    "hono/cors": "https://deno.land/x/hono@v4.3.11/middleware/cors/index.ts",
+    "hono/sse": "https://deno.land/x/hono@v4.3.11/helper/streaming/index.ts"
+  }
+}
