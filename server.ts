@@ -370,11 +370,8 @@ app.post("/trial", async (c) => {
   const data = body as any;
   const name = (data.name || "").trim();
   const phone = (data.phone || "").trim();
-  const code = (data.code || "").trim();
-
   if (!name || name.length < 2) return c.json({ error: "请填写公司名称或个人姓名" }, 400);
   if (!/^1[3-9]\d{9}$/.test(phone)) return c.json({ error: "请填写正确的手机号码" }, 400);
-  if (code.length < 4) return c.json({ error: "请输入验证码" }, 400);
 
   const contact = { phone };
   const now = new Date().toLocaleString("zh-CN");
