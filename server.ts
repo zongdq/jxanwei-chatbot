@@ -364,4 +364,26 @@ app.post("/chat", async (c) => {
   }
 });
 
+// ---- 免费试用提交 ----
+app.post("/trial", async (c) => {
+  const body = await c.req.json();
+  const data = body as any;
+  const name = (data.name || "").trim();
+  const phone = (data.phone || "").trim();
+  const code = (data.code || "").trim();
+
+  if (!name || name.length < 2) return c.json({ error: "请填写公司名称或个人姓名" }, 400);
+  if (!/^1[3-9]\d{9}$/.test(phone)) return c.json({ error: "请填写正确的手机号码" }, 400);
+  if (code.length < 4) return c.json({ error: "请输入验证码" }, 400);
+
+  const contact = { phone };
+  const now = new Date().toLocaleString("zh-CN");
+  const summary = `试用申请人：${name}\n手机号：${phone}\n提交时间：${now}`;
+
+  await saveLead({ contact, messages: [summary], timestamp: new Date().toISOString() });
+  await notifyAll(`试用-${name} / ${phone}`, summary);
+
+  return c.json({ ok: true, message: "提交成功，我们将尽快与您联系" });
+});
+
 Deno.serve({ port: 8000 }, app.fetch);
