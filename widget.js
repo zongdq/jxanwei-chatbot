@@ -6,7 +6,7 @@
   "use strict";
 
   // ---- 配置 ----
-  const API_URL = "https://jxanwei-chatbot.zongdq.deno.dev/chat";
+  const API_URL = "https://jxanwei-chatbot.zongdq.deno.net/chat";
   const COMPANY_NAME = "安威信息 AI 客服";
   const GREETING = "您好！我是安威信息的 AI 客服助手 👋\n\n我可以帮您了解：\n• 渗透测试与安全评估\n• 安全监测与加固服务\n• 等保合规咨询\n• 免费网站安全检测\n\n请问有什么可以帮到您的？";
 
@@ -105,7 +105,7 @@
 
   let isOpen = false;
   let isStreaming = false;
-  const messages: Array<{ role: string; content: string }> = [];
+  const messages = [];
 
   // 从 localStorage 恢复会话
   const saved = localStorage.getItem("jxanwei_chat");
@@ -123,22 +123,23 @@
   }
 
   // ---- 渲染 ----
-  function addMessage(role: string, content: string) {
+  function addMessage(role, content) {
     const div = document.createElement("div");
     div.className = `msg ${role}`;
+    div.textContent = content; div.style.whiteSpace = "pre-wrap";
     const now = new Date();
-    div.innerHTML = content.replace(/\n/g, "<br>") +
-      `<div class="time">${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}</div>`;
+    const timeDiv = document.createElement("div"); timeDiv.className = "time";
+    timeDiv.textContent = `${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`;
+    div.appendChild(timeDiv);
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+  function showTyping() {
+    const div = document.createElement("div");
+    div.className = "typing"; div.id = "aiTyping";
+    for (let i = 0; i < 3; i++) { const s = document.createElement("span"); div.appendChild(s); }
     body.appendChild(div);
     body.scrollTop = body.scrollHeight;
   }
-
-  function showTyping() {
-    const div = document.createElement("div");
-    div.className = "typing";
-    div.id = "aiTyping";
-    div.innerHTML = "<span></span><span></span><span></span>";
-    body.appendChild(div);
     body.scrollTop = body.scrollHeight;
   }
 
@@ -147,7 +148,7 @@
   }
 
   function renderHistory() {
-    body.innerHTML = "";
+    body.textContent = "";
     for (const m of messages) {
       addMessage(m.role, m.content);
     }
@@ -188,11 +189,11 @@
       }
 
       // 读取 SSE 流
-      const reader = resp.body!.getReader();
+      const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let botMsg = "";
-      let msgDiv: HTMLDivElement | null = null;
+      let msgDiv = null;
       hideTyping();
 
       // 创建 Bot 消息容器
@@ -216,16 +217,16 @@
           if (!trimmed.startsWith("data: ")) continue;
           const data = trimmed.slice(6);
           if (data === "[DONE]") {
-            // 流结束
-            msgDiv.innerHTML = botMsg.replace(/\n/g, "<br>") +
+            msgDiv.textContent = botMsg; msgDiv.style.whiteSpace = "pre-wrap";
+            const td1 = document.createElement("div"); td1.className = "time"; td1.textContent = timeStr; msgDiv.appendChild(td1);
               `<div class="time">${timeStr}</div>`;
             body.scrollTop = body.scrollHeight;
             messages.push({ role: "assistant", content: botMsg });
             saveMessages();
             return;
           }
-          botMsg += data;
-          msgDiv.innerHTML = botMsg.replace(/\n/g, "<br>") +
+          msgDiv.textContent = botMsg; msgDiv.style.whiteSpace = "pre-wrap";
+          const td2 = document.createElement("div"); td2.className = "time"; td2.textContent = timeStr; msgDiv.appendChild(td2);
             `<div class="time">${timeStr}</div>`;
           body.scrollTop = body.scrollHeight;
         }
@@ -262,7 +263,7 @@
     }
   });
 
-  document.getElementById("aiChatClose")!.addEventListener("click", () => {
+  document.getElementById("aiChatClose").addEventListener("click", () => {
     isOpen = false;
     panel.classList.remove("open");
   });

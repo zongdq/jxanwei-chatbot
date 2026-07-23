@@ -171,8 +171,28 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// ---- CORS ----
-app.use("*", cors({ origin: ALLOWED_ORIGIN }));
+// ---- 安全工具 ----
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function sanitizeInput(input: string, maxLen = 2000): string {
+  return escapeHtml(input.trim().slice(0, maxLen));
+}
+
+// ---- CORS (限制官网域名) ----
+app.use("*", cors({
+  origin: ALLOWED_ORIGIN !== "*" ? ALLOWED_ORIGIN : ["https://jxanwei.com", "http://192.168.124.109", "http://localhost"],
+}));
+
+// ---- CSP 安全头 ----
+app.use("*", async (c, next) => {
+  await next();
+  c.res.headers.set("X-Content-Type-Options", "nosniff");
+  c.res.headers.set("X-Frame-Options", "DENY");
+  c.res.headers.set("X-XSS-Protection", "1; mode=block");
+  c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+});
 
 // ---- 状态页（含今日用量） ----
 app.get("/health", async (c) => {
@@ -243,9 +263,9 @@ ${leads.length === 0 ? '<div class="empty">暂无客户线索</div>' : ""}
 ${leads.map((l: any) => {
   const contactStr = [l.contact?.phone, l.contact?.email, l.contact?.wechat].filter(Boolean).join(" / ") || "未获取到联系方式";
   return `<div class="lead">
-    <div class="time">${l.timestamp || ""}</div>
-    <div class="contact">📞 ${contactStr}</div>
-    <div class="needs">${l.messages?.map((m: string) => `<p>${m}</p>`).join("") || ""}</div>
+    <div class="time">${escapeHtml(l.timestamp || "")}</div>
+    <div class="contact">📞 ${escapeHtml(contactStr)}</div>
+    <div class="needs">${(l.messages as string[])?.map((m: string) => `<p>${escapeHtml(m)}</p>`).join("") || ""}</div>
   </div>`;
 }).join("")}
 </body></html>`);
@@ -271,24 +291,30 @@ app.post("/chat", async (c) => {
     return c.json({ error: "无效的请求" }, 400);
   }
 
+  // 安全：清理所有消息内容，防 XSS 存储
+  const sanitizedMessages = messages.map((m: any) => ({
+    role: m.role,
+    content: sanitizeInput(String(m.content || ""), 2000),
+  }));
+
   // 检测联系方式
-  const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
+  const lastUserMsg = [...sanitizedMessages].reverse().find(m => m.role === "user");
   const userText = lastUserMsg?.content || "";
   const contact = extractContact(userText);
 
   if (contact.phone || contact.email || contact.wechat) {
     const contactStr = [contact.phone, contact.email, contact.wechat].filter(Boolean).join(" / ");
-    const recentMessages = messages.slice(-6).map(m => `${m.role === "user" ? "👤" : "🤖"}: ${m.content}`);
+    const recentMsgs = sanitizedMessages.slice(-6).map(m => `${m.role === "user" ? "👤" : "🤖"}: ${m.content}`);
     await saveLead({
       contact,
-      messages: recentMessages,
+      messages: recentMsgs,
       timestamp: new Date().toISOString(),
     });
-    await notifyAll(contactStr, recentMessages.join("\n"));
+    await notifyAll(contactStr, recentMsgs.join("\n"));
   }
 
-  // 裁剪历史：只保留最近 N 轮（每轮 = 1 user + 1 assistant）
-  const recentMessages = messages.slice(-MAX_HISTORY * 2);
+  // 裁剪历史：只保留最近 N 轮
+  const recentMessages = sanitizedMessages.slice(-MAX_HISTORY * 2);
 
   try {
     const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
@@ -368,7 +394,7 @@ app.post("/chat", async (c) => {
 app.post("/trial", async (c) => {
   const body = await c.req.json();
   const data = body as any;
-  const name = (data.name || "").trim();
+  const name = sanitizeInput(data.name || "", 50);
   const phone = (data.phone || "").trim();
   if (!name || name.length < 2) return c.json({ error: "请填写公司名称或个人姓名" }, 400);
   if (!/^1[3-9]\d{9}$/.test(phone)) return c.json({ error: "请填写正确的手机号码" }, 400);
